@@ -1,328 +1,128 @@
-import win32api, win32gui, win32con
-import win32clipboard as wt
-import time
-import random
-import re
+# 初始化邻接矩阵
+'''
+默认将num*num的矩阵中的元素定义成INF(无穷大)，为了方便后续的使用min函数求最短路径
+然后分别将由x至y路径的权值加入矩阵的matrix[x][y]中，如果是无向图则同时令matrix[x][y]=matrix[y][x]
+'''
 
 
-def Get_hwnd(name="QQ"):
-    """
-    根据窗口名查找句柄号
-    :param name: 窗口名
-    :return: 句柄号
-    """
-    hwnd_title = dict()
-
-    def get_all_hwnd(hwnd, mouse):
-        if win32gui.IsWindow(hwnd) and win32gui.IsWindowEnabled(hwnd) and win32gui.IsWindowVisible(hwnd):
-            hwnd_title.update({win32gui.GetWindowText(hwnd): hwnd})
-
-    win32gui.EnumWindows(get_all_hwnd, 0)
-    print(hwnd_title)
-    return hwnd_title.get(name)
+def Init(arr, num):
+    matrix = [[100007 for col in range(num)] for row in range(num)]
+    for t in arr:
+        # 对于无向图的操作
+        matrix[t[0] - 1][t[1] - 1] = matrix[t[1] - 1][t[0] - 1] = t[2]
+        # 如果是有向图则：matrix[t[0] - 1][t[1] - 1] = t[2]
+    return matrix
 
 
-def Get_hwnd_blurry(name="QQ"):
-    """
-    根据窗口名模糊查找包含的群名，主要用于针对在一个窗口中同时打开了多个群存在多个会话的情况
-    :param name:
-    :return:
-    """
-    hwnd_title = dict()
-    global tmp
-    tmp = ''
+'''
+传入一个节点，当然，传入的这个节点是随意的。将这个点到其他点的距离存入dis数组，并将传入的这个点标记为已访问。
+然后找出从start（传入的那个点）出发的路径中的最短的一个路径；并将它到达的那个点记性并标记。
+然后更新dis数组（重点）：如果该结点没有被访问过，且点距离当前点的距离更近，就执行更新；
+最后dis数组中就是最小生成树的最短路径的集合；对其求和，即是最小生成树的最短路径；
 
-    def get_all_hwnd(hwnd, mouse):
-        global tmp
-        if win32gui.IsWindow(hwnd) and win32gui.IsWindowEnabled(hwnd) and win32gui.IsWindowVisible(hwnd):
-            hwnd_title.update({win32gui.GetWindowText(hwnd): hwnd})
-            if name in win32gui.GetWindowText(hwnd):
-                tmp = win32gui.GetWindowText(hwnd)
+'''
 
-    win32gui.EnumWindows(get_all_hwnd, 0)
-    if tmp == '':
-        return 0
+
+def prime(start, arr, num):
+    INF = 100007
+    start -= 1
+    dis = []  # 储存由其他点到该点距离的最小值
+    vis = [0 for col in range(num)]
+    for i in range(num):  # 将与start点相连的路径存到dis数组中
+        dis.append(arr[start][i])
+    vis[start] = 1
+
+    while True:
+        flag = -1
+        min = INF
+        for i in range(num):  # 在此时从start发出的路径中找到一个最短的路径；即：在当前的生成树中找一条最短路径
+            if vis[i] != 1 and dis[i] < min:
+                min = dis[i]
+                flag = i  # 此时，start到i的路径最短，并将i记下，后面标记为已访问
+        if flag == -1:  # 所有结点都已访问；即：已生成最小生成树；跳出死循环
+            break
+        vis[flag] = 1
+        for i in range(num):  # 更新dis数组
+            if vis[i] != 1 and dis[i] > arr[flag][i]:  # 该结点没有被访问过，且flag点到该点的距离比另一个点到该点的距离更近，就执行更新
+                dis[i] = arr[flag][i]
+
+    sumDis = 0
+    for i in range(num):  # n个点一共n-1条路
+        if i != start:
+            sumDis = sumDis + dis[i]
+    return sumDis
+
+
+#  kruskal算法基本思想：在初始状态时隐去图中的所有边，这样图中每个顶点都自成一个连通块。之后执行下面的步骤：
+# （1）对所有的边按边权从小到大进行排序；
+# （2）按边权从小到大测试所有边，如果当前测试边所连接的两个顶点不在同一个连通块中，则把这条测试边加入当前最小生成树中；否则，将边舍弃；
+# （3）执行步骤（2），知道最小生成树中的边数等于总顶点数减1或者测试完所有的边时结束。
+#     当结束时，如果最小生成树的边数小于总顶点数减1，则说明该图不连通
+
+# 注意：这个伪代码里需要注意两个细节：
+# （1）如何判断测试边的两个端点是否在不同的连通块中；
+# （2）如何将测试边加入到最小生成树中；
+#  其实我们可以把每个连通块当做一个集合，判断两个端点是否在同一个连通块中就可以转换为判断两个端点是否在同一个集合中，
+#  解决这个问题的方法是使用并查集。并查集可以通过查询两个结点所在集合的根结点是否相同来判断它们是否在同一个集合中，
+#  而合并功能恰好可以解决上面提到的第二个问题，即只要把测试边的两个端点所在集合合并，就能达到将边加入最小生成树的目的。
+
+def findFather(father, x): # 使用并查集寻找根节点
+    if x == father[x]:
+        return x
     else:
-        return hwnd_title.get(tmp)
+        return findFather(father, father[x])
 
 
-def GetText():
-    """
-    获取剪切板文本
-    :return:
-    """
-    wt.OpenClipboard()
-    d = wt.GetClipboardData(win32con.CF_UNICODETEXT)
-    wt.CloseClipboard()
-    return d
-
-
-def SetText(aString):
-    """
-    设置剪贴板文本
-    :param aString:
-    :return:
-    """
-    wt.OpenClipboard()
-    wt.EmptyClipboard()
-    wt.SetClipboardData(win32con.CF_UNICODETEXT, aString)
-    wt.CloseClipboard()
-
-
-def mouse_click(x, y, type=1):
-    """
-    鼠标移动到目标位置并点击
-    :param x: x
-    :param y: y
-    :param type:点击次数
-    :return:
-    """
-    if type == 2:
-        win32api.SetCursorPos([x, y])
-        win32api.mouse_event(win32con.MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
-        win32api.mouse_event(win32con.MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
-        win32api.mouse_event(win32con.MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
-        win32api.mouse_event(win32con.MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
+def kruskal(arr, num, edge):
+    ans = 0
+    numEdge = 0
+    father = []
+    for i in range(num):  # 将每一个点设置成一个集合，即该顶点的根是自己
+        father.append(i)
+    arr.sort(key=lambda x: x[2])  # 按照边的权重进行排序
+    for i in range(edge):
+        fau = findFather(father, arr[i][0])  # 找到一个顶点的根
+        fav = findFather(father, arr[i][1])  # 找到另一个顶点的根
+        if fav != fau:  # 如果两个顶点的根不同，即表示这两个顶点相连不是同一个集合内，不会构成圈，可以相连
+            father[fau] = fav   # 将其中一个顶点的并查集的集合设置成另外一个
+            ans = ans + arr[i][2]
+            numEdge += 1
+            if numEdge == num - 1:  # 判断是否已经连接了所有顶点
+                break
+    if numEdge != num - 1:  # 如果遍历完所有边后，仍然没有得到n-1个顶点，则无法构造生成树
+        return "Error"
     else:
-        win32api.SetCursorPos([x, y])
-        win32api.mouse_event(win32con.MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
-        win32api.mouse_event(win32con.MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
+        return ans
 
 
-def Open_win(phwnd):
-    """
-    将当前句柄窗口置顶显示
-    :param phwnd:
-    :return:
-    """
-    win32gui.ShowWindow(phwnd, win32con.SW_SHOWNORMAL)
-    win32gui.SetForegroundWindow(phwnd)
-
-
-def Close_win(phwnd):
-    """
-    关闭当前句柄窗口
-    :param phwnd:
-    :return:
-    """
-    win32gui.PostMessage(phwnd, win32con.WM_CLOSE, 0, 0)
-
-
-def Get_win_size(phwnd):
-    """
-    获取窗口大小
-    :param phwnd:
-    :return: (0,0,0,0)返回的是窗口左上角坐标和窗口右下角坐标
-    """
-    # winRect = win32gui.GetWindowRect(phwnd)
-    return win32gui.GetWindowRect(phwnd)
-
-
-def Random_Sleep():
-    """
-    随机休息一定时间
-    import random
-    print( random.randint(1,10) )        # 产生 1 到 10 的一个整数型随机数
-    print( random.random() )             # 产生 0 到 1 之间的随机浮点数
-    print( random.uniform(1.1,5.4) )     # 产生  1.1 到 5.4 之间的随机浮点数，区间可以不是整数
-    print( random.choice('tomorrow') )   # 从序列中随机选取一个元素
-    print( random.randrange(1,100,2) )   # 生成从1到100的间隔为2的随机整数
-    :return:
-    """
-    time.sleep(random.uniform(0.05, 0.1))
-
-
-def Ctrl_A():
-    """
-    全选
-    :return:
-    """
-    win32api.keybd_event(17, 0, 0, 0)  # Ctrl
-    win32api.keybd_event(65, 0, 0, 0)  # A
-    win32api.keybd_event(65, 0, win32con.KEYEVENTF_KEYUP, 0)  # 释放按键
-    win32api.keybd_event(17, 0, win32con.KEYEVENTF_KEYUP, 0)
-    time.sleep(random.uniform(0.1, 0.2))
-
-
-def Ctrl_C():
-    """
-    粘贴
-    :return:
-    """
-    win32api.keybd_event(17, 0, 0, 0)  # Ctrl
-    win32api.keybd_event(67, 0, 0, 0)  # A
-    win32api.keybd_event(67, 0, win32con.KEYEVENTF_KEYUP, 0)  # 释放按键
-    win32api.keybd_event(17, 0, win32con.KEYEVENTF_KEYUP, 0)
-    time.sleep(random.uniform(0.1, 0.2))
-
-
-def Ctrl_Home():
-    """
-    向上翻页
-    :return:
-    """
-    win32api.keybd_event(17, 0, 0, 0)  # Ctrl
-    win32api.keybd_event(36, 0, 0, 0)  # Home
-    win32api.keybd_event(36, 0, win32con.KEYEVENTF_KEYUP, 0)  # 释放按键
-    win32api.keybd_event(17, 0, win32con.KEYEVENTF_KEYUP, 0)
-    time.sleep(random.uniform(0.1, 0.2))
-
-
-def Ctrl_End():
-    """
-    向下翻页
-    :return:
-    """
-    win32api.keybd_event(17, 0, 0, 0)  # Ctrl
-    win32api.keybd_event(35, 0, 0, 0)  # End
-    win32api.keybd_event(35, 0, win32con.KEYEVENTF_KEYUP, 0)  # 释放按键
-    win32api.keybd_event(17, 0, win32con.KEYEVENTF_KEYUP, 0)
-    time.sleep(random.uniform(0.1, 0.2))
-
-
-def Match_time(string):
-    """
-    匹配字符串中的时间，如果只有时分秒则以当前的年月日补充
-    :param string: 待匹配字符串
-    :return: 返回时间
-    """
-    pattern_ymdhms = re.compile("(\d{4}/\d{1,2}/\d{1,2} \d{1,2}:\d{1,2}:\d{1,2})")
-    chat_time = re.findall(pattern_ymdhms, string)
-    if chat_time == []:
-        pattern_hms = re.compile("(\d{1,2}:\d{1,2}:\d{1,2})")
-        chat_time = re.findall(pattern_hms, string)
-        if chat_time == []:
-            return "None"
-        else:
-            chat_time = time.strftime("%Y/%m/%d") + " " + chat_time[0]
-            return chat_time
-    else:
-        return chat_time[0]
-
-
-def Match_qq(string):
-    """
-    匹配字符串中括号里面的QQ号
-    :param string:
-    :return:
-    """
-    pattern_qq = re.compile("\((\d+)\)")
-    chat_qq = re.findall(pattern_qq, string)
-    if chat_qq == []:
-        return "None"
-    else:
-        return chat_qq[0]
-
-
-def Get_Match_data(listdata, type="\n"):
-    """
-    通过正则表达式对QQ聊天信息进行匹配提取用户信息，时间，聊天内容
-    :param listdata:测试语句：'【管理员】隆昌 21  尤小鱼(152440688)  2020/08/10 16:42:03\n八月还有31\n七月还有100天'
-    :return:
-    """
-    data = []
-    result = listdata.split(type)
-    if len(result) >= 2:
-        data.append(Match_qq(result[0]))
-        data.append(Match_time(result[0]))
-        data.append(result[1:])
-        if data[0] != "None":
-            return data
-        else:
-            data = []
-            data.append(Match_qq(result[1]))
-            data.append(Match_time(result[1]))
-            data.append(result[2:])
-            return data
-    else:
-        return []
-
-
-def Get_Last_list(file):
-    try:
-        f = open("./tmpdata/%s.txt" % file, "r", encoding="utf-8")
-        tmpt = f.read()
-        result = tmpt.split("\n\n\n\n")
-        data = []
-        for i in result:
-            out = Get_Match_data(i, type="\n\n")
-            data.append(out)
-        return data
-    except:
-        return []
-
-
-def Save_Processed_data(file, data):
-    f = open(file, "a", encoding="utf-8")
-    for i in range(len(data)):
-        if data[i] != []:
-            for j in data[i]:
-                f.write(str(j) + "\t")
-            f.write("\n")
-
-
-start = time.time()
 while True:
-    grouptext = ["测试"]
-    phwnd = Get_hwnd()  # 获取窗口句柄
-    # phwnd=66334
-    if phwnd != None:
-        Open_win(phwnd)
-        winRect = Get_win_size(phwnd)
-        """依次查询获取的群名，获取群消息记录"""
-        for i in grouptext:
-            time.sleep(1)
-            SetText(i)  # 设置剪切板文字
-            mouse_click(winRect[0] + 120, winRect[1] + 125)  # 移动到QQ搜索窗口并点击
-            Random_Sleep()
-            win32gui.SendMessage(phwnd, 258, 22, 2080193)
-            win32gui.SendMessage(phwnd, 770, 0, 0)
-            time.sleep(1)  # 信息输入完毕休息等待窗口反应
-            mouse_click(winRect[0] + 120, winRect[1] + 200, type=2)
-            time.sleep(1)  # 鼠标点击后等待界面弹出
-            num = 5  # 最多尝试10次
-            try:
-                while True:
-                    if num > 0:
-                        nowphwnd = Get_hwnd_blurry(i)
-                        if nowphwnd == None:
-                            num -= 1
-                        else:
-                            print("%s：窗口打开成功！" % i)
-                            Open_win(nowphwnd)
-                            nowwinRect = Get_win_size(nowphwnd)
-                            mouse_click(nowwinRect[0] + 300, nowwinRect[1] + 380)
-                            Ctrl_Home()
-                            mouse_click(nowwinRect[0] + 270, nowwinRect[1] + 110)  # 刷新窗口
-                            time.sleep(1)  # 刷新等待1秒
-                            Ctrl_Home()
-                            mouse_click(nowwinRect[0] + 270, nowwinRect[1] + 110)  # 刷新窗口
-                            time.sleep(1)  # 刷新等待1秒
-                            Ctrl_A()
-                            Ctrl_C()
-                            list_last = Get_Last_list(i)  # 得到已经获取了的数据
-                            """保存当前的临时数据"""
-                            getdata = GetText().split("\r\n\r\n")
-                            list_now = []
-                            # print(getdata)
-                            for n in getdata:
-                                list_now.append(Get_Match_data(n))
-                            list_out = [y for y in list_now if y not in list_last]
-                            """处理后的数据存储"""
-                            Save_Processed_data("./Data/%s.txt" % i, list_out)
-                            print("新增数据！", time.strftime("%Y-%m-%d-%H-%M-%S"), list_out)
-                            f = open("./tmpdata/%s.txt" % i, "w", encoding="utf-8")
-                            f.write(GetText())
-                            f.close()
-                            Close_win(nowphwnd)
-                            time.sleep(1)
-                            break
-                        time.sleep(1)
-                    else:
-                        break
-            except:
-                print("Wrong!")
-            time.sleep(2)
-        time.sleep(100)
-    end = time.time()
-    print(end - start)
+    n, m = input().split()
+    n = int(n)
+    m = int(m)
+    if n == 0 and m == 0:
+        break
+    listRoad = []
+    for i in range(m):
+        strInt = []
+        str = input().split()
+        for j in str:
+            strInt.append(int(j))
+        listRoad.append(strInt)
+    ansKruskal = kruskal(listRoad, n, m)
+    initList = Init(listRoad, n)
+    ansPrime = prime(1, initList, n)
+    print(ansKruskal)
+    print(ansPrime)
+'''
+6 10
+0 1 4
+1 2 1
+2 3 6
+3 4 5
+0 4 1
+0 5 2
+1 5 3
+2 5 5
+3 5 4
+4 5 3
+'''
